@@ -1,6 +1,8 @@
 // uploadRouter.js
 const Router = require('koa-router');
 const koaBody = require('koa-body');
+
+const { fromPath } = require('pdf2pic');
 const fs = require('fs');
 const db = require('../db')
 const { successResponse, errorResponse } = require('../utils/index');
@@ -53,6 +55,46 @@ router.post('/upload', async (ctx) => {
             status: 'error',
             message: 'No file uploaded',
         };
+    }
+});
+
+// 定义路由
+router.post('/convert-pdf-to-images', async (ctx) => {
+    const { pdf } = ctx.request.files;
+    console.log(pdf, '[pdf]');
+
+    if (!pdf || pdf.mimetype !== 'application/pdf') {
+        ctx.status = 400;
+        ctx.body = { success: false, message: '请上传正确的 PDF 文件' };
+        return;
+    }
+
+    const options = {
+        density: 100,
+        quality: 100,
+        outputType: 'jpeg',
+        outputDir: './images',
+        multiFile: true
+    };
+
+    // 使用 pdf2pic 模块执行转换操作
+
+
+    try {
+        const convert = formPath(pdf.filepath, options)
+        const pageToConvertAsImage = 1;
+        convert(pageToConvertAsImage, { responseType: "image" })
+            .then((resolve) => {
+                console.log("Page 1 is now converted as image");
+
+                ctx.body = { success: true, resolve };
+            });
+    } catch (error) {
+        ctx.status = 500;
+        ctx.body = { success: false, message: 'PDF 转换失败' };
+    } finally {
+        // 清理临时 PDF 文件
+        fs.unlinkSync(pdf.filepath);
     }
 });
 

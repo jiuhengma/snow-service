@@ -3,64 +3,59 @@ const router = new Router();
 const { successResponse, errorResponse } = require('../utils/index');
 const { ObjectId } = require('mongodb');
 
-const mongoose = require('mongoose');
-const Schema = mongoose.Schema;
-
-// 定义集合模型
-const UserSchema = new Schema({
-    name: String,
-    instrod: String
-    // age: Number,
-    // email: String
-}, { versionKey: false });
-
-// 创建集合模型
-const UserModel = mongoose.model('User', UserSchema);
+const jwt = require('jsonwebtoken');
+const authMiddleware = require('./authMiddleware');
+const UserModel = require('./models/userModel');
 
 // 登录
-router.get('/login', async ctx => {
+router.post('/login', async ctx => {
+    const { username, password } = ctx.request.body;
     try {
-        const { email, password } = ctx.request.body;
-        const user = await collection.findOne({ email });
+        const user = await UserModel.findOne({ username });
+        console.log(user, '-user');
         if (!user || user.password !== password) {
             errorResponse(ctx, 401, '无效账户！');
             return;
         }
-        successResponse(ctx, '登录成功！')
+        // 用户验证成功，生成 JWT
+        const token = jwt.sign({ userId: user._id }, 'secret_key', { expiresIn: '1h' });
+        successResponse(ctx, { token }, '登录成功！')
     } catch (error) {
-        errorResponse(ctx)
+        errorResponse(ctx, 500, 'Internal server error!')
     }
 })
 
 // 注册
 router.post('/register', async ctx => {
+    const { username, password } = ctx.request.body;
     try {
-        const requestBody = ctx.request.body;
-        console.log(requestBody, '[requestBody]');
-        const { username, email, password } = ctx.request.body;
         // 查询用户是否存在
-        const existingUser = await collection.findOne({ email });
+        const existingUser = await UserModel.findOne({ username });
+        console.log(existingUser, 'existingUser');
         if (existingUser) {
             errorResponse(ctx, 400, '用户已存在！');
             return;
         }
         // 新用户
-        const newUser = { username, email, password };
-        await collection.insertOne(newUser);
-        if (result?.acknowledged) {
-            successResponse(ctx)
-        }
+        const newUser = new UserModel({ username, password });
+        await newUser.save();
+        successResponse(ctx)
     } catch (error) {
-        errorResponse(ctx, error.message)
+        errorResponse(ctx, 500, 'Internal server error!');
     }
 })
 
-// 列表
-router.get('/list', async ctx => {
+// 获取用户信息
+router.get('/info', authMiddleware, async ctx => {
     try {
-        // 查询所有用户
-        const users = await UserModel.find();
-        successResponse(ctx, users)
+        console.log(ctx.state.user, '[]user');
+        const { userId } = ctx.state.user;
+        // 返回结果排除password
+        const userInfo = await UserModel.findById(userId, { password: 0 });
+        console.log(userInfo);
+        if (userInfo) {
+            successResponse(ctx, userInfo)
+        }
     } catch (error) {
         errorResponse(ctx, error.message)
     }
@@ -85,14 +80,13 @@ router.post('/modify/:id', async ctx => {
         console.log(userId, '[userId]');
         const updateData = ctx.request.body;
         console.log(updateData, '[requestBody]');
-        // 更新数据
         // 查找用户并更新信息
-        const updatedUser = await UserModel.findByIdAndUpdate(new ObjectId(userId), updateData, { new: true });
+        const updatedUser = await UserModel.updateOne({ _id: userId }, updateData);
         console.log(updatedUser, '[updatedUser]');
-        if (!updatedUser) errorResponse(ctx, '更新失败！')
+        if (!updatedUser.acknowledged) errorResponse(ctx, '更新失败！')
         successResponse(ctx)
     } catch (error) {
-        errorResponse(ctx, error.message)
+        errorResponse(ctx, 404, error.message)
     }
 })
 

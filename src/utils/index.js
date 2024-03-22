@@ -3,7 +3,6 @@
 const successResponse = (ctx, data, message = 'Success') => {
     ctx.status = 200;
     ctx.body = {
-        code: 200,
         status: 'success',
         message,
         data,

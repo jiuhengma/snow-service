@@ -1,39 +1,37 @@
 const Router = require('koa-router');
 const router = new Router();
-const db = require('../db')
 const { successResponse, errorResponse } = require('../utils/index');
-const mongoose = require('mongoose');
 // const { Binary } = require('mongodb');
-const Schema = mongoose.Schema;
 const fs = require('fs')
 const mkdirp = require('mkdirp')
 
-// 定义集合模型
-const ArticleSchema = new Schema({
-    images: [String],
-    title: String,
-    // author: String,
-    // tags: Array,
-    content: String,
-}, { versionKey: false });
+const authMiddleware = require('./authMiddleware');
 
-// 创建集合模型
-const ArticleModel = mongoose.model('Article', ArticleSchema);
+const UserModel = require('./models/userModel');
+const ArticleModel = require('./models/articleModel');
 
 // 文章列表
 router.get('/list', async ctx => {
     try {
-        const articles = await ArticleModel.find();
-        console.log(articles, '[articles]');
-        ctx.type = 'image/jpeg';
-        successResponse(ctx, articles)
+        const { page = 1, pageSize = 10 } = ctx.query;
+        const skip = (parseInt(page) - 1) * parseInt(pageSize);
+        const limit = parseInt(pageSize);
+        const total = await ArticleModel.countDocuments();
+        const articles = await ArticleModel.find()
+            .skip(skip)
+            .limit(limit);
+        successResponse(ctx, {
+            total,
+            currentPage: page,
+            list: articles
+        })
     } catch (error) {
-        errorResponse(ctx, 500, 'error')
+        errorResponse(ctx, 500, error.message)
     }
 })
 
 // 创建/新建
-router.post('/add', async ctx => {
+router.post('/add', authMiddleware, async ctx => {
     // 获取请求体中的文字内容
     const { title, content } = ctx.request.body;
 
@@ -64,18 +62,31 @@ router.post('/add', async ctx => {
         }
     }
 
+    const { userId } = ctx.state.user;
+    // 返回结果排除password
+    const userInfo = await UserModel.findById(userId, { password: 0 });
+
     try {
         // 将文章内容保存到数据库
         ArticleModel.create({
             title,
             content,
             images,
+            author: userInfo.username,
         });
-
-        // // 返回成功消息和保存的文章信息
         successResponse(ctx)
     } catch (error) {
         errorResponse(ctx, 500, error.message)
+    }
+})
+
+router.get('/detail/:id', async ctx => {
+    const articleId = ctx.params.id;
+    try {
+        const article = await ArticleModel.findById(articleId);
+        successResponse(ctx, article)
+    } catch (error) {
+        errorResponse(ctx, 404, error.message)
     }
 })
 

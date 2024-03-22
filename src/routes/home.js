@@ -2,6 +2,8 @@ const Router = require('koa-router');
 
 const router = new Router();
 
+const authMiddleware = require('./authMiddleware');
+
 
 // 模拟轮播图数据
 const carouselData = [
@@ -18,7 +20,8 @@ const candyData = [
 ];
 
 // 首页信息接口
-router.get('/list', (ctx) => {
+router.get('/list', authMiddleware, (ctx) => {
+    console.log(ctx.state.user, '[user]');
     // 返回轮播图和首页资讯数据
     try {
         // 构造返回的数据
